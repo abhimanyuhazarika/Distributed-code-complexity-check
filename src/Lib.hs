@@ -37,31 +37,23 @@ doWork = numPrimeFactors
 -- | worker function.
 -- This is the function that is called to launch a worker. It loops forever, asking for work, reading its message queue
 -- and sending the result of runnning numPrimeFactors on the message content (an integer).
-worker :: ( ProcessId  -- The processid of the manager (where we send the results of our work)
-         , ProcessId) -- the process id of the work queue (where we get our work from)
-       -> Process ()
-worker (manager, workQueue) = do
-    us <- getSelfPid              -- get our process identifier
-    liftIO $ putStrLn $ "Starting worker: " ++ show us
-    go us
-  where
-    go :: ProcessId -> Process ()
-    go us = do
 
-      send workQueue us -- Ask the queue for work. Note that we send out process id so that a message can be sent to us
-
-      -- Wait for work to arrive. We will either be sent a message with an integer value to use as input for processing,
-      -- or else we will be sent (). If there is work, do it, otherwise terminate
-      receiveWait
-        [ match $ \n  -> do
-            liftIO $ putStrLn $ "[Node " ++ (show us) ++ "] given work: " ++ show n
-            send manager (doWork n)
-            liftIO $ putStrLn $ "[Node " ++ (show us) ++ "] finished work."
-            go us -- note the recursion this function is called again!
-        , match $ \ () -> do
-            liftIO $ putStrLn $ "Terminating node: " ++ show us
-            return ()
-        ]
+worker:: (ProcessId, NodeId, String) -> Process ()
+worker (master, workerId, url) = do
+  liftIO ( putStrLn $ "Starting worker : " ++ (show workerId) ++ " with parameter: " ++ url)
+  let repoName = last $ splitOn "/" url
+  gitRepoExists <- liftIO $ doesDirectoryExist ("/tmp/" ++ repoName)
+  if not gitRepoExists then do
+    liftIO $ callProcess "/usr/bin/git" ["clone", url, "/tmp/" ++ repoName]
+  let conf = (Config 6 [] [] [] Colored)
+  let source = allFiles ("/tmp/" ++ repoName)
+              >-> P.mapM (liftIO . analyze conf)
+              >-> P.map (filterResults conf)
+              >-> P.filter filterNulls
+  liftIO $ putStrLn $ "Launching analyse for " ++ url
+  (output, _) <- liftIO $ capture $ runSafeT $ runEffect $ exportStream conf source
+  liftIO ( putStrLn $ "End of worker : " ++ (show workerId) ++ " with parameter: " ++ url)
+  send master $ (workerId, url, output)
 
 remotable ['worker] -- this makes the worker function executable on a remote node
 
