@@ -55,7 +55,7 @@ worker (master, workerId, url) = do
   liftIO ( putStrLn $ "End of worker : " ++ (show workerId) ++ " with parameter: " ++ url)
   send master $ (workerId, url, output)
 
-remotable ['worker] -- this makes the worker function executable on a remote node
+#remotable ['worker] -- this makes the worker function executable on a remote node
 
 manager :: Integer    -- The number range we wish to generate work for (there will be n work packages)
         -> [NodeId]   -- The set of cloud haskell nodes we will initalise as workers
