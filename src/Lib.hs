@@ -1,3 +1,4 @@
+
 {-# LANGUAGE BangPatterns    #-}
 {-# LANGUAGE TemplateHaskell #-}
 --{-# CPP #-}
@@ -69,4 +70,29 @@ main = do
     ["slave", host, port] -> do
       backend <- initializeBackend host port myRemoteTable
       startSlave backend
+      
+master :: Backend -> [NodeId] -> Process ()
+master backend slaves = do
+  liftIO . putStrLn $ "Slaves: " ++ show slaves
+  let repos = ["https://github.com/commercialhaskell/stack","https://github.com/ghc/ghc","https://github.com/yesodweb/yesod","https://github.com/sdiehl/write-you-a-haskell","https://github.com/jameysharp/corrode"]
+  responses <- feedSlavesAndGetResponses repos slaves [] []
+  liftIO $ mapM (\(r,u) -> putStrLn $ "\n\n" ++ u ++ " :\n\n" ++  r) responses
+  return ()
+
+feedSlavesAndGetResponses :: [String] -> [NodeId] -> [NodeId] -> [(String,String)] -> Process [(String,String)]
+feedSlavesAndGetResponses [] freeSlaves [] responses = return responses
+feedSlavesAndGetResponses repos freeSlaves busySlaves responses = do
+  (restRepos, newBusySlaves, newFreeSlaves) <- feedSlaves repos freeSlaves []
+  m <- expectTimeout 60000000
+  case m of
+    Nothing -> die "Exiting: master fatal failure"
+    Just (slave, url, resp) -> feedSlavesAndGetResponses restRepos (slave:newFreeSlaves) (delete slave (newBusySlaves ++ busySlaves)) ((resp,url):responses)
+
+feedSlaves :: [String] -> [NodeId] -> [NodeId] -> Process ([String], [NodeId], [NodeId])
+feedSlaves [] slaves newBusySlaves = return ([], newBusySlaves, slaves)
+feedSlaves repos [] newBusySlaves = return (repos, newBusySlaves, [])
+feedSlaves (repo:repos) (oneSlave:slaves) newBusySlaves = do
+  masterPid <- getSelfPid
+  _ <- spawn oneSlave $ $(mkClosure 'worker) (masterPid, oneSlave, repo :: String)
+  feedSlaves repos slaves (oneSlave:newBusySlaves)
 
