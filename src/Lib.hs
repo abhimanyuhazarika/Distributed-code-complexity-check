@@ -16,22 +16,26 @@
 module Lib
     ( someFunc
     ) where
+import Argon
+import System.Environment (getArgs)
+import System.Process
+import System.Directory (doesDirectoryExist)
+import Control.Distributed.Process
+import Control.Distributed.Process.Node (initRemoteTable, runProcess)
+import Control.Distributed.Process.Backend.SimpleLocalnet
+import Control.Distributed.Process.Closure
+import Control.Monad (forever, forM_)
+import Data.List
+import Data.List.Split
+import Data.String.Utils
+import qualified Pipes.Prelude as P
+import Pipes
+import Pipes.Safe (runSafeT)
+import System.IO.Silently
+import Data.Time
+import System.IO
+import Data.Char
 
--- These imports are required for Cloud Haskell
-import           Control.Distributed.Process
-import           Control.Distributed.Process.Backend.SimpleLocalnet
-import           Control.Distributed.Process.Closure
-import           Control.Distributed.Process.Node                   (initRemoteTable)
-import           Control.Monad
-import           Network.Transport.TCP                              (createTransport,
-                                                                     defaultTCPParameters)
-import           PrimeFactors
-import           System.Environment                                 (getArgs)
-import           System.Exit
-
--- | worker function.
--- This is the function that is called to launch a worker. It loops forever, asking for work, reading its message queue
--- and sending the result of runnning numPrimeFactors on the message content (an integer).
 worker :: (ProcessId, NodeId, String) -> Process ()
 worker (master, workerId, url) = do
   liftIO ( putStrLn $ "Worker : " ++ (show workerId) ++ " started with parameter: " ++ url) 
@@ -54,19 +58,19 @@ worker (master, workerId, url) = do
 remotable ['worker]
 
 myRemoteTable :: RemoteTable
-myRemoteTable = Main.__remoteTable initRemoteTable
+myRemoteTable = Lib.__remoteTable initRemoteTable
 
-main :: IO ()
-main = do
+someFunc :: IO ()
+someFunc = do
   args <- getArgs
   case args of
     ["master", host, port] -> do
-      start <- getCurrentTime
+      currentTime <- getCurrentTime
       backend <- initializeBackend host port myRemoteTable
       startMaster backend (master backend)
-      end <- getCurrentTime
-      let timetaken = diffUTCTime end start
-      appendFile "record.txt" (show timetaken ++ ",")
+      finishTime <- getCurrentTime
+      let timeDiff = diffUTCTime finishTime currentTime
+      appendFile "time.txt" (show timeDiff ++ ",")
     ["slave", host, port] -> do
       backend <- initializeBackend host port myRemoteTable
       startSlave backend
