@@ -24,7 +24,7 @@ library
                      , argon
                      , distributed-process
                      , network-transport-tcp
-                     , Distributed-process-simplelocalnet
+                     , distributed-process-simplelocalnet
                      , split
                      , MissingH
                      , process
